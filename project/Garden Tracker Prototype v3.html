@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Garden Tracker — Prototype v3</title>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #1c1c1c; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+.phone { width: 320px; height: 640px; border-radius: 44px; border: 3px solid #333; overflow: hidden; position: relative; box-shadow: 0 24px 60px rgba(0,0,0,0.6), 4px 6px 0 #111; flex-shrink: 0; transition: background 0.4s; }
+.phone-notch { width: 90px; height: 20px; background: #222; border-radius: 0 0 14px 14px; margin: 0 auto; position: relative; z-index: 10; flex-shrink: 0; }
+.screen { width: 100%; height: calc(100% - 20px); display: flex; flex-direction: column; overflow: hidden; position: relative; transition: background 0.4s; }
+.scroll-area { flex: 1; overflow-y: auto; overflow-x: hidden; }
+.scroll-area::-webkit-scrollbar { width: 0; }
+.img-block { background: repeating-linear-gradient(45deg,#ccc8c0,#ccc8c0 3px,#dedad3 3px,#dedad3 10px); border: 2px solid #aaa; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #999; font-size: 11px; text-align: center; line-height: 1.3; flex-shrink: 0; }
+.img-block.dark { background: repeating-linear-gradient(45deg,#3a4a3b,#3a4a3b 3px,#4a5e4b 3px,#4a5e4b 10px); border-color: #666; }
+.camera-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.camera-canvas { display: none; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useEffect, useContext, createContext } = React;
+const { TweaksPanel, TweakSection, TweakRadio, TweakSlider, useTweaks } = window;
+
+/* ══════════════════════════════════
+   THEME SYSTEM
+══════════════════════════════════ */
+const THEMES = {
+  'Earthy Sketch': {
+    id: 'earthy',
+    bg: '#f5f2ee', surface: '#ede9e3', surfaceAlt: '#e4dfd8',
+    border: '#ccc', borderAccent: '#5a7a5b',
+    accent: '#3d5a3e', accentLight: '#c8d9c0', accentText: '#f5f2ee',
+    text: '#222', subtext: '#888', subtextLight: '#aaa',
+    danger: '#c55', dangerLight: '#e8c4b8', dangerBorder: '#c88070',
+    warn: '#8b3a2a', warnLight: '#e8c4b8',
+    font: "'Caveat', cursive", fontAlt: "'Caveat', cursive",
+    radius: 12, radiusPill: 999, radiusCard: 14,
+    navBg: '#f5f2ee', navBorder: '#ddd', camBg: '#2a3530',
+    shadow: '3px 3px 0',
+  },
+  'Clean Minimal': {
+    id: 'clean',
+    bg: '#ffffff', surface: '#f4f6f3', surfaceAlt: '#eaede8',
+    border: '#dde8da', borderAccent: '#52b788',
+    accent: '#1e5f3a', accentLight: '#d8ede0', accentText: '#ffffff',
+    text: '#1a1a1a', subtext: '#7a8a7a', subtextLight: '#b0c0b0',
+    danger: '#d64c4c', dangerLight: '#fde8e8', dangerBorder: '#e08080',
+    warn: '#8b3a2a', warnLight: '#fdecea',
+    font: "'DM Sans', sans-serif", fontAlt: "'DM Sans', sans-serif",
+    radius: 16, radiusPill: 999, radiusCard: 20,
+    navBg: '#ffffff', navBorder: '#eee', camBg: '#1a2218',
+    shadow: '0 2px 14px rgba(30,95,58,0.10)',
+  },
+  'Dark Botanical': {
+    id: 'dark',
+    bg: '#141c12', surface: '#1f2b1c', surfaceAlt: '#263322',
+    border: '#354d30', borderAccent: '#5aaa3e',
+    accent: '#5aaa3e', accentLight: '#263322', accentText: '#141c12',
+    text: '#e0eed8', subtext: '#7aaa6a', subtextLight: '#4a6a3a',
+    danger: '#e06060', dangerLight: '#3a1c1c', dangerBorder: '#c04040',
+    warn: '#e09040', warnLight: '#3a2a10',
+    font: "'Caveat', cursive", fontAlt: "'Caveat', cursive",
+    radius: 10, radiusPill: 8, radiusCard: 12,
+    navBg: '#1f2b1c', navBorder: '#354d30', camBg: '#0a100a',
+    shadow: '0 4px 20px rgba(0,0,0,0.5)',
+  },
+};
+
+const VOICE = {
+  Casual: {
+    myPlants: 'My Plants', schedule: 'Schedule', identify: 'Identify', dr: 'Dr. Plant',
+    water: 'Water', fertilize: 'Fertilize', prune: 'Prune', pestCheck: 'Pest check',
+    healthy: 'Healthy', plantName: 'Monstera', plantSci: 'Monstera deliciosa',
+    todayLabel: 'Schedule', regularWatering: 'Regular watering',
+    addPlant: 'Add your first plant', searchPlants: 'Search plants…',
+    goodDay: 'Good watering day',
+  },
+  Scientific: {
+    myPlants: 'Plant Collection', schedule: 'Care Log', identify: 'ID Scan', dr: 'Diagnosis',
+    water: 'Irrigate', fertilize: 'Fertilisation', prune: 'Pruning', pestCheck: 'IPM check',
+    healthy: 'Vigorous', plantName: 'M. deliciosa', plantSci: 'Monstera deliciosa Liebm.',
+    todayLabel: 'Care Protocol', regularWatering: 'Irrigation cycle',
+    addPlant: 'Add specimen', searchPlants: 'Search by common or scientific name…',
+    goodDay: 'Optimal irrigation conditions',
+  },
+};
+
+const ThemeCtx = createContext(null);
+const useT = () => useContext(ThemeCtx);
+
+/* ── density helpers ── */
+const useDensity = (density) => ({
+  p: (n) => Math.round(n * (density < 1 ? 0.72 : density > 1 ? 1.3 : 1)),
+  gap: (n) => Math.round(n * (density < 1 ? 0.7 : density > 1 ? 1.25 : 1)),
+  fs: (n) => density < 1 ? n - 1 : density > 1 ? n + 1 : n,
+});
+
+/* ══════════════════════════════════
+   SHARED COMPONENTS
+══════════════════════════════════ */
+const StatusBar = () => {
+  const { t } = useT();
+  return <div style={{ height:22, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 16px', fontSize:11, color:t.subtext, fontFamily:t.font }}>
+    <span>9:41</span><span>●●● ▮▮▮</span>
+  </div>;
+};
+
+const BottomNav = ({ active, go }) => {
+  const { t, voice, d } = useT();
+  const tabs = [
+    { label: voice.myPlants.split(' ')[0], icon:'🌿', screen:'plants' },
+    { label: voice.schedule, icon:'📅', screen:'schedule' },
+    { label: voice.identify, icon:'📷', screen:'identify' },
+    { label: voice.dr.split(' ')[0], icon:'🩺', screen:'dr' },
+    { label: 'Light', icon:'💡', screen:'light' },
+  ];
+  return (
+    <div style={{ position:'absolute', bottom:0, left:0, right:0, height:56, background:t.navBg, borderTop:`2px solid ${t.navBorder}`, display:'flex', alignItems:'center', justifyContent:'space-around', padding:`0 4px ${d.p(6)}px`, zIndex:20, transition:'background 0.3s, border-color 0.3s' }}>
+      {tabs.map((tab, i) => (
+        <div key={tab.label} onClick={() => go(tab.screen)}
+          style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2, fontSize: d.fs(9), color: active===i ? t.accent : t.subtextLight, cursor:'pointer', padding:'4px 6px', borderRadius:8, minWidth:44, fontFamily:t.font, transition:'color 0.2s' }}>
+          <div style={{ width:22, height:22, background: active===i ? t.accentLight : t.surfaceAlt, borderRadius: t.id==='dark' ? 6 : 5, border:`1.5px solid ${active===i ? t.borderAccent : t.border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, transition:'all 0.2s' }}>{tab.icon}</div>
+          {tab.label}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const ImgBlock = ({ w, h, label, dark, style }) => (
+  <div className={`img-block${dark?' dark':''}`} style={{ width: w||'100%', height: h, flexShrink:0, borderRadius:6, ...style }}>
+    {label && <span>{label}</span>}
+  </div>
+);
+
+const Btn = ({ children, onClick, outline, style }) => {
+  const { t, d } = useT();
+  return (
+    <div onClick={onClick} style={{
+      height:44, borderRadius:t.radiusPill,
+      background: outline ? 'transparent' : t.accent,
+      border: outline ? `2px solid ${t.border}` : `2px solid ${t.accent}`,
+      display:'flex', alignItems:'center', justifyContent:'center',
+      color: outline ? t.subtext : t.accentText,
+      fontSize: d.fs(15), fontWeight:700, cursor:'pointer',
+      fontFamily:t.font, transition:'all 0.2s',
+      boxShadow: outline ? 'none' : (t.id==='earthy' ? `2px 2px 0 ${t.accent}` : t.shadow),
+      ...style
+    }}>{children}</div>
+  );
+};
+
+const Card = ({ children, style, green }) => {
+  const { t } = useT();
+  return (
+    <div style={{ background: green ? t.accentLight : t.surface, border:`2px solid ${green ? t.borderAccent : t.border}`, borderRadius:t.radiusCard, transition:'all 0.3s', ...style }}>
+      {children}
+    </div>
+  );
+};
+
+const Pill = ({ label }) => {
+  const { t } = useT();
+  return <span style={{ display:'inline-flex', alignItems:'center', padding:'3px 10px', borderRadius:999, border:`2px solid ${t.borderAccent}`, background:t.accentLight, fontSize:10, color:t.accent, fontWeight:700, whiteSpace:'nowrap', fontFamily:t.font }}>{label}</span>;
+};
+
+/* ══════════════════════════════════
+   ONBOARDING
+══════════════════════════════════ */
+const OnboardingScreen = ({ go }) => {
+  const { t, d } = useT();
+  return (
+    <div className="screen" style={{ background:t.bg, fontFamily:t.font }}>
+      <ImgBlock h={260} label="hero plant photo" style={{ borderRadius:0, border:'none', borderBottom:`2px solid ${t.border}` }} />
+      <div style={{ flex:1, padding:`${d.p(16)}px 20px`, display:'flex', flexDirection:'column', justifyContent:'space-between' }}>
+        <div>
+          <div style={{ fontSize:d.fs(24), fontWeight:700, color:t.accent, marginBottom:4, fontFamily:t.font }}>🌿 Garden Tracker</div>
+          <div style={{ fontSize:d.fs(14), color:t.subtext, marginBottom:14, fontFamily:t.font }}>Care for every plant — indoors &amp; out</div>
+          {['🗓 Watering & care reminders','🌤 Weather-smart scheduling','📷 Identify plants instantly','📒 Growth journal & log'].map(f => (
+            <div key={f} style={{ fontSize:d.fs(13), color:t.text, marginBottom:5, opacity:0.7, fontFamily:t.font }}>{f}</div>
+          ))}
+        </div>
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          <Btn onClick={() => go('onboarding-wizard')}>Get Started</Btn>
+          <div style={{ textAlign:'center', fontSize:12, color:t.subtextLight, fontFamily:t.font }}>Already have an account? <span style={{ color:t.accent, textDecoration:'underline', cursor:'pointer' }}>Sign in</span></div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ══════════════════════════════════
+   ONBOARDING WIZARD
+══════════════════════════════════ */
+const OnboardingWizard = ({ go }) => {
+  const { t, d } = useT();
+  const [step, setStep] = useState(0);
+  const [selected, setSelected] = useState([]);
+  const steps = [
+    { title:'Where are your plants?', sub:'Select all that apply', options:['🛋 Living Room','🛏 Bedroom','🌳 Garden / Outdoors','🪴 Balcony','🍳 Kitchen','🏢 Office'] },
+    { title:'Set your location', sub:'Used for weather-smart watering schedules', isLocation:true },
+    { title:'Add your first plant', sub:'Take a photo or search by name', isPlant:true },
+  ];
+  const cur = steps[step];
+  const next = () => { if (step < steps.length-1) { setStep(s=>s+1); setSelected([]); } else go('plants'); };
+  return (
+    <div className="screen" style={{ background:t.bg, fontFamily:t.font }}>
+      <div style={{ padding:'10px 20px 0', display:'flex', gap:6 }}>
+        {steps.map((_,i) => <div key={i} style={{ flex:1, height:4, borderRadius:2, background:i<=step?t.accent:t.border, transition:'background 0.3s' }}></div>)}
+      </div>
+      <div style={{ padding:'14px 20px 0' }}>
+        <div style={{ fontSize:d.fs(20), fontWeight:700, color:t.accent, marginBottom:2 }}>{cur.title}</div>
+        <div style={{ fontSize:13, color:t.subtext }}>{cur.sub}</div>
+      </div>
+      <div className="scroll-area" style={{ padding:'12px 20px' }}>
+        {cur.options && cur.options.map(o => {
+          const on = selected.includes(o);
+          return (
+            <div key={o} onClick={() => setSelected(s => on ? s.filter(x=>x!==o) : [...s,o])}
+              style={{ padding:`${d.p(10)}px 12px`, borderRadius:t.radius, marginBottom:8, cursor:'pointer', fontSize:d.fs(14),
+                border: on?`2px solid ${t.accent}`:`2px solid ${t.border}`, background: on?t.accentLight:t.surface,
+                display:'flex', alignItems:'center', justifyContent:'space-between', transition:'all 0.15s' }}>
+              <span style={{ color:t.text }}>{o}</span>
+              <div style={{ width:18, height:18, borderRadius:4, border: on?`2px solid ${t.accent}`:`2px solid ${t.border}`, background: on?t.accent:'transparent', display:'flex', alignItems:'center', justifyContent:'center', color:t.accentText, fontSize:11 }}>{on?'✓':''}</div>
+            </div>
+          );
+        })}
+        {cur.isLocation && (
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            <div style={{ background:t.surface, border:`2px solid ${t.border}`, borderRadius:t.radius, padding:'10px 12px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <span style={{ fontSize:d.fs(14), color:t.subtext }}>City / State</span>
+              <span style={{ fontSize:d.fs(13), color:t.accent, fontWeight:700 }}>Austin, TX ✏️</span>
+            </div>
+            <Card green style={{ padding:'10px 12px' }}>
+              <div style={{ fontSize:d.fs(13), fontWeight:700, color:t.accent, marginBottom:4 }}>🌤 Current weather</div>
+              <div style={{ fontSize:d.fs(13), color:t.accent }}>Austin, TX · 72°F · Partly Cloudy</div>
+            </Card>
+          </div>
+        )}
+        {cur.isPlant && (
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            <div style={{ height:130, borderRadius:t.radius, border:`3px dashed ${t.borderAccent}`, background:t.accentLight,
+              display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:6, cursor:'pointer' }} onClick={() => go('new-plant-setup')}>
+              <span style={{ fontSize:36 }}>📷</span>
+              <span style={{ fontSize:d.fs(14), color:t.accent, fontWeight:700, fontFamily:t.font }}>Take a photo to identify</span>
+            </div>
+          </div>
+        )}
+      </div>
+      <div style={{ padding:`0 20px 12px`, display:'flex', gap:8 }}>
+        {step > 0 ? <Btn outline style={{ flex:1 }} onClick={() => setStep(s=>s-1)}>Back</Btn>
+                  : <Btn outline style={{ flex:1 }} onClick={next}>Skip</Btn>}
+        <Btn style={{ flex:2 }} onClick={next}>{step===steps.length-1?'Start Tracking →':'Next →'}</Btn>
+      </div>
+    </div>
+  );
+};
+
+/* ══════════════════════════════════
+   MY PLANTS
+══════════════════════════════════ */
+const MyPlantsScreen = ({ go }) => {
+  const { t, voice, d } = useT();
+  const rooms = [
+    { room:'🛋 Living Room', count:3, plants:['Monstera','Pothos','ZZ Plant'] },
+    { room:'🌳 Garden', count:4, plants:['Lavender','Rosemary','Tomatoes','Basil'] },
+    { room:'🛏 Bedroom', count:2, plants:['Snake Plant','Peace Lily'] },
+  ];
+  return (
+    <div className="screen" style={{ background:t.bg, fontFamily:t.font }}>
+      <StatusBar />
+      <div style={{ padding:`4px 16px 0`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <span style={{ fontSize:d.fs(22), fontWeight:700, color:t.text }}>{voice.myPlants}</span>
+        <div onClick={() => go('settings')} style={{ width:28, height:28, background:t.accentLight, borderRadius:14, border:`2px solid ${t.borderAccent}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, cursor:'pointer' }}>👤</div>
+      </div>
+      <div style={{ margin:`6px 16px 2px`, padding:'5px 10px', background:t.accentLight, borderRadius:8, border:`2px solid ${t.borderAccent}`, display:'flex', justifyContent:'space-between', alignItems:'center', transition:'all 0.3s' }}>
+        <span style={{ fontSize:11, color:t.accent, fontFamily:t.font }}>🌤 Austin, TX · 72°F · Partly Cloudy</span>
+        <span style={{ fontSize:11, color:t.accent, fontWeight:700, fontFamily:t.font }}>{voice.goodDay}</span>
+      </div>
+      <div className="scroll-area" style={{ paddingBottom:66 }}>
+        {rooms.map(s => (
+          <div key={s.room} style={{ marginTop:d.p(10) }}>
+            <div style={{ padding:`0 16px ${d.p(4)}px`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <span style={{ fontSize:d.fs(14), fontWeight:700, color:t.text }}>{s.room}</span>
+              <span style={{ fontSize:11, color:t.subtextLight }}>{s.count} plants</span>
+            </div>
+            <div style={{ padding:'0 16px', display:'flex', gap:d.p(8), overflowX:'auto' }}>
+              {s.plants.map(p => (
+                <div key={p} style={{ width:88, flexShrink:0, borderRadius:t.radius, overflow:'hidden', border:`2px solid ${t.border}`, background:t.surface, cursor:'pointer', transition:'all 0.3s' }} onClick={() => go('detail')}>
+                  <ImgBlock h={68} style={{ borderRadius:0, border:'none' }} />
+                  <div style={{ padding:`4px 6px`, fontSize:d.fs(11), fontWeight:700, color:t.text }}>{p}</div>
+                  {p==='Monstera' && <div style={{ padding:'0 6px 4px' }}><span style={{ fontSize:9, background:t.dangerLight, color:t.warn, padding:'1px 5px', borderRadius:4, border:`1px solid ${t.dangerBorder}` }}>2d late</span></div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div onClick={() => go('identify')} style={{ position:'absolute', bottom:66, right:16, width:44, height:44, borderRadius:22, background:t.accent, border:`2px solid ${t.accent}`, display:'flex', alignItems:'center', justifyContent:'center', color:t.accentText, fontSize:26, fontWeight:700, cursor:'pointer', boxShadow: t.id==='earthy'?`3px 3px 0 ${t.accent}`:t.shadow, zIndex:15 }}>+</div>
+      <BottomNav active={0} go={go} />
+    </div>
+  );
+};
+
+/* ══════════════════════════════════
+   SCHEDULE
+══════════════════════════════════ */
+const ScheduleScreen = ({ go }) => {
+  const { t, voice, d } = useT();
+  const [activeFilters, setActiveFilters] = useState([]);
+  const allWeeks = [
+    { label:'This week', days:[
+      { date:'Mon Apr 28', tasks:[{ plant:'Monstera', icon:'💧', type:voice.water, urgent:true }, { plant:'Pothos', icon:'💧', type:voice.water }] },
+      { date:'Tue Apr 29', tasks:[{ plant:'Lavender', icon:'✂️', type:voice.prune }] },
+      { date:'Thu May 1',  tasks:[{ plant:'Snake Plant', icon:'💧', type:voice.water }, { plant:'Basil', icon:'💧', type:voice.water }] },
+      { date:'Sat May 3',  tasks:[{ plant:'Monstera', icon:'🌿', type:voice.fertilize }, { plant:'Tomatoes', icon:'🐛', type:voice.pestCheck }] },
+    ]},
+    { label:'Next week', days:[
+      { date:'Mon May 5', tasks:[{ plant:'Pothos', icon:'💧', type:voice.water }, { plant:'ZZ Plant', icon:'💧', type:voice.water }] },
+      { date:'Wed May 7', tasks:[{ plant:'Rosemary', icon:'✂️', type:voice.prune }] },
+      { date:'Fri May 9', tasks:[{ plant:'All outdoor', icon:'🌿', type:voice.fertilize }] },
+    ]},
+    { label:'Later this month', days:[
+      { date:'May 12', tasks:[{ plant:'Monstera', icon:'💧', type:voice.water }, { plant:'Peace Lily', icon:'💧', type:voice.water }] },
+      { date:'May 15', tasks:[{ plant:'Tomatoes', icon:'🐛', type:voice.pestCheck }] },
+      { date:'May 25', tasks:[{ plant:'All plants', icon:'🌿', type:voice.fertilize }] },
+    ]},
+  ];
+  const filterDefs = [{ icon:'💧', label:voice.water }, { icon:'🌿', label:voice.fertilize }, { icon:'✂️', label:voice.prune }, { icon:'🐛', label:voice.pestCheck }];
+  const typeColorBg = { '💧': t.id==='dark'?'#1a3050':'#b8d4e8', '🌿': t.accentLight, '✂️': t.id==='dark'?'#3a2a10':'#e8d8c0', '🐛': t.dangerLight };
+  const typeColorBorder = { '💧': t.id==='dark'?'#3a6090':'#6a9ab8', '🌿': t.borderAccent, '✂️': t.id==='dark'?'#9a6a20':'#a87a4a', '🐛': t.dangerBorder };
+  const toggleFilter = icon => setActiveFilters(f => f.includes(icon) ? f.filter(x=>x!==icon) : [...f, icon]);
+  const filterTasks = tasks => activeFilters.length===0 ? tasks : tasks.filter(t => activeFilters.includes(t.icon));
+  return (
+    <div className="screen" style={{ background:t.bg, fontFamily:t.font }}>
+      <StatusBar />
+      <div style={{ padding:`4px 16px 6px`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <span style={{ fontSize:d.fs(22), fontWeight:700, color:t.text }}>{voice.schedule}</span>
+        <div style={{ display:'flex', gap:5 }}>
+          {filterDefs.map(f => { const on = activeFilters.includes(f.icon); return (
+            <div key={f.icon} onClick={() => toggleFilter(f.icon)} title={f.label}
+              style={{ width:28, height:28, borderRadius:14, cursor:'pointer', fontSize:14,
+                background: on ? (typeColorBg[f.icon]||t.accentLight) : t.surface,
+                border: `2px solid ${on ? (typeColorBorder[f.icon]||t.borderAccent) : t.border}`,
+                display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s' }}>
+              {f.icon}
+            </div>
+          ); })}
+        </div>
+      </div>
+      {activeFilters.length > 0 && (
+        <div style={{ padding:'0 16px 4px', display:'flex', alignItems:'center', gap:6 }}>
+          <span style={{ fontSize:11, color:t.accent, fontFamily:t.font }}>Showing: {activeFilters.join(' ')} only</span>
+          <span style={{ fontSize:11, color:t.danger, cursor:'pointer' }} onClick={() => setActiveFilters([])}>× Clear</span>
+        </div>
+      )}
+      <div className="scroll-area" style={{ padding:`0 16px`, paddingBottom:66 }}>
+        {allWeeks.map(w => {
+          const visibleDays = w.days.map(dd => ({ ...dd, tasks: filterTasks(dd.tasks) })).filter(dd => dd.tasks.length > 0);
+          if (visibleDays.length === 0) return null;
+          return (
+            <div key={w.label} style={{ marginBottom:d.p(14) }}>
+              <div style={{ fontSize:11, fontWeight:700, color:t.subtextLight, marginBottom:8, textTransform:'uppercase', letterSpacing:'0.06em', fontFamily:t.fontAlt }}>{w.label}</div>
+              {visibleDays.map(dd => (
+                <div key={dd.date} style={{ marginBottom:d.p(10) }}>
+                  <div style={{ fontSize:12, color:t.subtextLight, marginBottom:4, fontFamily:t.font }}>{dd.date}</div>
+                  {dd.tasks.map((task, i) => (
+                    <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:`${d.p(8)}px 10px`, marginBottom:4,
+                      borderRadius:t.radius, border:`2px solid ${typeColorBorder[task.icon]||t.border}`,
+                      background: typeColorBg[task.icon]||t.surface, transition:'all 0.3s' }}>
+                      <div style={{ width:30, height:30, borderRadius:15, background:'rgba(255,255,255,0.25)', border:`1.5px solid ${typeColorBorder[task.icon]||t.border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, flexShrink:0 }}>{task.icon}</div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:d.fs(13), fontWeight:700, color:t.text, fontFamily:t.font }}>{task.type}</div>
+                        <div style={{ fontSize:11, color:t.subtext, fontFamily:t.font }}>{task.plant}</div>
+                      </div>
+                      {task.urgent && <span style={{ fontSize:9, background:t.danger, color:'#fff', padding:'1px 5px', borderRadius:4 }}>Late</span>}
+                      <div style={{ width:20, height:20, borderRadius:10, border:`2px solid ${t.border}`, flexShrink:0 }}></div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+      <BottomNav active={1} go={go} />
+    </div>
+  );
+};
+
+/* ══════════════════════════════════
+   PLANT DETAIL
+══════════════════════════════════ */
+const PlantDetailScreen = ({ go }) => {
+  const { t, voice, d } = useT();
+  const [heroUploaded, setHeroUploaded] = useState(false);
+  const [progressPhotos, setProgressPhotos] = useState([{ label:'Feb 10', note:'New leaf emerging' }, { label:'Mar 22', note:'3 new leaves!' }]);
+  const heroRef = useRef(); const progressRef = useRef();
+  return (
+    <div className="screen" style={{ background:t.bg, fontFamily:t.font }}>
+      <div style={{ position:'relative', height:200, flexShrink:0 }}>
+        {heroUploaded ? <div style={{ width:'100%', height:200, background:t.accentLight, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, color:t.accent }}>📸 Photo uploaded</div>
+          : <ImgBlock h={200} dark label="Monstera photo" style={{ borderRadius:0, border:'none', width:'100%' }} />}
+        <div onClick={() => heroRef.current.click()} style={{ position:'absolute', bottom:10, right:12, background:'rgba(0,0,0,0.45)', borderRadius:999, padding:'4px 10px', display:'flex', alignItems:'center', gap:4, cursor:'pointer', border:'1.5px solid rgba(255,255,255,0.5)' }}>
+          <span style={{ fontSize:12 }}>📷</span><span style={{ fontSize:11, color:'#fff', fontFamily:t.font }}>Change photo</span>
+        </div>
+        <input ref={heroRef} type="file" accept="image/*" style={{ display:'none' }} onChange={e => { if(e.target.files?.[0]) setHeroUploaded(true); }} />
+        <div style={{ position:'absolute', top:10, left:12 }}>
+          <div onClick={() => go('plants')} style={{ width:28, height:28, borderRadius:14, background:'rgba(0,0,0,0.35)', border:'1.5px solid rgba(255,255,255,0.4)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', fontSize:13, color:'#fff' }}>←</div>
+        </div>
+        <div style={{ position:'absolute', bottom:10, left:12, display:'flex', gap:6 }}>
+          <Pill label="🏠 Bedroom" /><Pill label={`🌿 ${voice.healthy}`} />
+        </div>
+      </div>
+      <div className="scroll-area" style={{ padding:`${d.p(10)}px 16px`, paddingBottom:66 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
+          <span style={{ fontSize:d.fs(22), fontWeight:700, color:t.text }}>{voice.plantName}</span>
+        </div>
+        <div style={{ fontSize:12, color:t.subtext, marginBottom:d.p(14) }}>{voice.plantSci}</div>
+        <div style={{ display:'flex', justifyContent:'space-around', marginBottom:d.p(16) }}>
+          {[{ icon:'💧', label:voice.regularWatering, when:'Today', last:'5 days ago', urgent:true }, { icon:'🌿', label:voice.fertilize, when:'in 14 days', last:'11 days ago' }, { icon:'✂️', label:voice.prune, when:'in 30 days', last:'45 days ago' }].map(c => (
+            <div key={c.label} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4, width:90 }}>
+              <div style={{ width:56, height:56, borderRadius:28, border:`3px solid ${c.urgent?t.danger:t.borderAccent}`, background:t.surface, display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, transition:'all 0.3s' }}>{c.icon}</div>
+              <div style={{ fontSize:10, color:t.text, textAlign:'center', fontWeight:700, fontFamily:t.font }}>{c.label}</div>
+              <div style={{ fontSize:10, color:c.urgent?t.danger:t.accent, textAlign:'center', fontWeight:700 }}>{c.when}</div>
+              <div style={{ fontSize:9, color:t.subtextLight, textAlign:'center' }}>Last: {c.last}</div>
+            </div>
+          ))}
+        </div>
+        <Card style={{ padding:`${d.p(10)}px 12px`, marginBottom:d.p(14) }}>
+          <div style={{ fontSize:d.fs(16), fontWeight:700, marginBottom:8, color:t.text }}>{voice.todayLabel}</div>
+          {[{ icon:'💧', label:voice.water, late:'2d late' }, { icon:'💨', label:'Mist' }, { icon:'🌿', label:voice.fertilize, when:'May 10' }, { icon:'🐛', label:voice.pestCheck, when:'May 15' }].map(task => (
+            <div key={task.label} style={{ display:'flex', alignItems:'center', gap:10, padding:`${d.p(6)}px 0`, borderBottom:`1px solid ${t.border}` }}>
+              <div style={{ width:34, height:34, borderRadius:17, flexShrink:0, background: task.late?t.dangerLight:t.accentLight, border:`2px solid ${task.late?t.dangerBorder:t.borderAccent}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, position:'relative', transition:'all 0.3s' }}>
+                {task.icon}
+                {task.late && <div style={{ position:'absolute', bottom:-5, left:'50%', transform:'translateX(-50%)', background:t.danger, borderRadius:3, fontSize:7, color:'#fff', padding:'0 3px', whiteSpace:'nowrap' }}>{task.late}</div>}
+              </div>
+              <span style={{ flex:1, fontSize:d.fs(13), color:t.text }}>{task.label}</span>
+              {task.when && <span style={{ fontSize:11, color:t.subtextLight }}>{task.when}</span>}
+              <div style={{ width:20, height:20, borderRadius:10, border:`2px solid ${t.border}` }}></div>
+            </div>
+          ))}
+        </Card>
+        <div style={{ marginBottom:d.p(12) }}>
+          <div style={{ fontSize:d.fs(16), fontWeight:700, marginBottom:8, color:t.text }}>Progress Photos</div>
+          <div style={{ display:'flex', gap:d.p(8), overflowX:'auto', paddingBottom:4 }}>
+            {progressPhotos.map((p, i) => (
+              <div key={i} style={{ width:90, flexShrink:0, borderRadius:t.radius, overflow:'hidden', border:`2px solid ${t.border}`, background:t.surface, transition:'all 0.3s' }}>
+                {p.isNew ? <div style={{ width:90, height:70, background:t.accentLight, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, color:t.accent }}>📸 New</div>
+                  : <ImgBlock h={70} style={{ borderRadius:0, border:'none' }} />}
+                <div style={{ padding:'4px 6px' }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:t.accent }}>{p.label}</div>
+                  <div style={{ fontSize:9, color:t.subtext }}>{p.note}</div>
+                </div>
+              </div>
+            ))}
+            <div onClick={() => progressRef.current.click()} style={{ width:90, height:106, flexShrink:0, borderRadius:t.radius, border:`2px dashed ${t.borderAccent}`, background:t.accentLight, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4, cursor:'pointer', transition:'all 0.3s' }}>
+              <span style={{ fontSize:22 }}>📷</span>
+              <span style={{ fontSize:10, color:t.accent, textAlign:'center', fontFamily:t.font }}>Add photo</span>
+            </div>
+            <input ref={progressRef} type="file" accept="image/*" style={{ display:'none' }} onChange={e => { if(e.target.files?.[0]) setProgressPhotos(p => [...p, { label:'Apr 26', note:'New photo', isNew:true }]); }} />
+          </div>
+        </div>
+      </div>
+      <BottomNav active={-1} go={go} />
+    </div>
+  );
+};
+
+/* ══════════════════════════════════
+   IDENTIFY
+══════════════════════════════════ */
+const IdentifyScreen = ({ go }) => {
+  const { t } = useT();
+  return (
+    <div className="screen" style={{ background:t.camBg }}>
+      <ImgBlock h="100%" dark label="camera viewfinder" style={{ position:'absolute', inset:0, borderRadius:0, border:'none', width:'100%' }} />
+      <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <div style={{ width:220, height:270, border:'3px dashed rgba(255,255,255,0.65)', borderRadius:18, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'flex-end', paddingBottom:10 }}>
+          <div style={{ background:'rgba(0,0,0,0.55)', borderRadius:8, padding:'4px 10px', fontSize:11, color:'#fff', textAlign:'center', fontFamily:t.font }}>Fit whole plant within guide</div>
+        </div>
+      </div>
+      <div style={{ position:'absolute', top:12, left:14 }}>
+        <div onClick={() => go('plants')} style={{ width:28, height:28, borderRadius:14, background:'rgba(0,0,0,0.45)', border:'2px solid rgba(255,255,255,0.4)', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:13, cursor:'pointer' }}>✕</div>
+      </div>
+      <div style={{ position:'absolute', bottom:72, left:0, right:0, display:'flex', justifyContent:'center', gap:8 }}>
+        {['Whole plant','Leaf','Flower'].map((m,i) => (
+          <div key={m} style={{ padding:'4px 12px', borderRadius:999, fontSize:11, cursor:'pointer', background: i===0?'rgba(255,255,255,0.92)':'rgba(0,0,0,0.45)', color: i===0?'#222':'#eee', border:'1.5px solid rgba(255,255,255,0.45)', fontFamily:t.font }}>{m}</div>
+        ))}
+      </div>
+      <div style={{ position:'absolute', bottom:0, left:0, right:0, height:60, background:'rgba(25,35,30,0.92)', display:'flex', alignItems:'center', justifyContent:'space-around' }}>
+        <div style={{ width:32, height:32, background:'rgba(255,255,255,0.1)', borderRadius:8, border:'2px solid rgba(255,255,255,0.3)' }}></div>
+        <div style={{ width:52, height:52, borderRadius:26, border:'3px solid #fff', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }} onClick={() => go('new-plant-setup')}>
+          <div style={{ width:40, height:40, background:'#fff', borderRadius:20 }}></div>
+        </div>
+        <div style={{ width:32, height:32, background:'rgba(255,255,255,0.1)', borderRadius:8, border:'2px solid rgba(255,255,255,0.3)' }}></div>
+      </div>
+    </div>
+  );
+};
+
+/* ══════════════════════════════════
+   NEW PLANT SETUP
+══════════════════════════════════ */
+const NewPlantSetupScreen = ({ go }) => {
+  const { t, voice, d } = useT();
+  const [step, setStep] = useState(0);
+  const [form, setForm] = useState({ name:'Monstera', type:'Tropical Houseplant', location:'Bedroom', container:'Terracotta pot', datePlanted:'2025-04-26' });
+  const set = (k,v) => setForm(f => ({...f, [k]:v}));
+  const steps = ['Plant Info','Location & Care','Review'];
+  const OptionPicker = ({ label, value, options, onChange }) => (
+    <div style={{ marginBottom:10 }}>
+      <div style={{ fontSize:12, color:t.subtext, marginBottom:4, fontFamily:t.font }}>{label}</div>
+      <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+        {options.map(o => { const on = value===o; return (
+          <div key={o} onClick={() => onChange(o)} style={{ padding:'5px 12px', borderRadius:t.radiusPill, cursor:'pointer', fontSize:12, border: on?`2px solid ${t.accent}`:`2px solid ${t.border}`, background: on?t.accentLight:t.surface, color: on?t.accent:t.subtext, fontWeight: on?700:400, fontFamily:t.font, transition:'all 0.15s' }}>{o}</div>
+        ); })}
+      </div>
+    </div>
+  );
+  return (
+    <div className="screen" style={{ background:t.bg, fontFamily:t.font }}>
+      <div style={{ padding:'10px 16px 0', display:'flex', alignItems:'center', gap:10 }}>
+        <div onClick={() => step>0?setStep(s=>s-1):go('identify')} style={{ width:28, height:28, borderRadius:14, background:t.surface, border:`1.5px solid ${t.border}`, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', fontSize:13, color:t.subtext }}>←</div>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:d.fs(16), fontWeight:700, color:t.text }}>New Plant</div>
+          <div style={{ fontSize:11, color:t.subtext }}>Step {step+1} of {steps.length} — {steps[step]}</div>
+        </div>
+      </div>
+      <div style={{ padding:'8px 16px 0', display:'flex', gap:6 }}>
+        {steps.map((_,i) => <div key={i} style={{ flex:1, height:4, borderRadius:2, background:i<=step?t.accent:t.border, transition:'background 0.3s' }}></div>)}
+      </div>
+      {step===0 && <Card green style={{ margin:'10px 16px 0', padding:'8px 12px', display:'flex', gap:10, alignItems:'center' }}>
+        <ImgBlock w={56} h={56} style={{ borderRadius:8, flexShrink:0 }} />
+        <div><div style={{ fontSize:14, fontWeight:700, color:t.accent }}>Identified: Monstera</div><div style={{ fontSize:11, color:t.accent }}>Monstera deliciosa · 92%</div></div>
+      </Card>}
+      <div className="scroll-area" style={{ padding:'10px 16px', paddingBottom:12 }}>
+        {step===0 && <>
+          <div style={{ marginBottom:10 }}>
+            <div style={{ fontSize:12, color:t.subtext, marginBottom:4 }}>Plant nickname</div>
+            <div style={{ background:t.surface, border:`2px solid ${t.border}`, borderRadius:t.radius, padding:'8px 12px', fontSize:14, color:t.text }}>{form.name}</div>
+          </div>
+          <OptionPicker label="Plant type" value={form.type} onChange={v=>set('type',v)} options={['Tropical Houseplant','Succulent / Cactus','Herb','Vegetable','Outdoor / Garden','Flowering plant']} />
+        </>}
+        {step===1 && <>
+          <OptionPicker label="Location / Room" value={form.location} onChange={v=>set('location',v)} options={['Living Room','Bedroom','Kitchen','Balcony','Garden','Office']} />
+          <OptionPicker label="Container type" value={form.container} onChange={v=>set('container',v)} options={['Terracotta pot','Plastic pot','Hanging planter','Raised bed','In the ground','Grow bag']} />
+          <div style={{ marginBottom:10 }}>
+            <div style={{ fontSize:12, color:t.subtext, marginBottom:4 }}>Date planted</div>
+            <div style={{ background:t.surface, border:`2px solid ${t.border}`, borderRadius:t.radius, padding:'8px 12px', fontSize:14, color:t.text, display:'flex', justifyContent:'space-between' }}><span>{form.datePlanted}</span><span style={{ color:t.subtextLight }}>📅</span></div>
+          </div>
+        </>}
+        {step===2 && <>
+          <div style={{ display:'flex', gap:10, marginBottom:12, alignItems:'center' }}>
+            <ImgBlock w={80} h={80} style={{ borderRadius:12, flexShrink:0 }} />
+            <div><div style={{ fontSize:d.fs(18), fontWeight:700, color:t.text }}>{form.name}</div><div style={{ fontSize:12, color:t.subtext }}>Monstera deliciosa</div></div>
+          </div>
+          {[{ label:'Plant type', value:form.type }, { label:'Location', value:form.location }, { label:'Container', value:form.container }, { label:'Date planted', value:form.datePlanted }].map(r => (
+            <div key={r.label} style={{ background:t.surface, border:`2px solid ${t.border}`, borderRadius:t.radius, padding:'10px 12px', display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+              <span style={{ fontSize:12, color:t.subtext }}>{r.label}</span>
+              <span style={{ fontSize:13, color:t.accent, fontWeight:700 }}>{r.value}</span>
+            </div>
+          ))}
+        </>}
+      </div>
+      <div style={{ padding:'0 16px 12px', display:'flex', gap:8 }}>
+        {step>0 && <Btn outline style={{ flex:1 }} onClick={() => setStep(s=>s-1)}>Back</Btn>}
+        <Btn style={{ flex:2 }} onClick={() => step<2?setStep(s=>s+1):go('detail')}>{step===2?`Save Plant 🌿`:'Next →'}</Btn>
+      </div>
+    </div>
+  );
+};
+
+/* ══════════════════════════════════
+   DR. PLANT
+══════════════════════════════════ */
+const DrScreen = ({ go }) => {
+  const { t, voice, d } = useT();
+  return (
+    <div className="screen" style={{ background:t.bg, fontFamily:t.font }}>
+      <StatusBar />
+      <div style={{ padding:`4px 16px 8px`, borderBottom:`2px solid ${t.border}`, display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+        <span style={{ fontSize:20 }}>🩺</span>
+        <div style={{ flex:1 }}><div style={{ fontSize:d.fs(17), fontWeight:700, color:t.text }}>{voice.dr}</div><div style={{ fontSize:11, color:t.subtext }}>Diagnose &amp; heal your plants</div></div>
+      </div>
+      <div className="scroll-area" style={{ padding:`12px 16px`, display:'flex', flexDirection:'column', gap:10, paddingBottom:110 }}>
+        <div style={{ maxWidth:'86%', background:t.accentLight, border:`2px solid ${t.borderAccent}`, borderRadius:'4px 14px 14px 14px', padding:'8px 12px' }}>
+          <div style={{ fontSize:11, fontWeight:700, color:t.accent, marginBottom:4 }}>{voice.dr}</div>
+          <div style={{ fontSize:12, color:t.text, lineHeight:1.4 }}>Hello! What's going on with your plant? Share a photo or describe the symptoms.</div>
+        </div>
+        <div style={{ alignSelf:'flex-end' }}><ImgBlock w={110} h={90} label="uploaded photo" style={{ borderRadius:12 }} /></div>
+        <div style={{ maxWidth:'90%', background:t.accentLight, border:`2px solid ${t.borderAccent}`, borderRadius:'4px 14px 14px 14px', padding:'10px 12px' }}>
+          <div style={{ fontSize:11, fontWeight:700, color:t.accent, marginBottom:4 }}>{voice.dr}</div>
+          <div style={{ fontSize:12, fontWeight:700, color:t.danger, marginBottom:4 }}>⚠️ Diagnosis: Root rot (likely)</div>
+          <div style={{ fontSize:11, color:t.text, marginBottom:8, lineHeight:1.4 }}>Yellowing lower leaves and dark stem base — act quickly.</div>
+          <div style={{ display:'flex', gap:6 }}>
+            <Btn style={{ flex:1, height:32 }}>Treatment plan</Btn>
+            <div style={{ flex:1, height:32, borderRadius:t.radiusPill, border:`1.5px solid ${t.borderAccent}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, color:t.accent, cursor:'pointer', fontFamily:t.font }}>Learn more</div>
+          </div>
+        </div>
+        <div style={{ fontSize:d.fs(13), fontWeight:700, color:t.text, marginTop:4 }}>Common issues</div>
+        {['🟡 Overwatering','🤎 Yellow leaves','🐛 Pests spotted'].map(issue => (
+          <Card key={issue} style={{ padding:'8px 12px', borderRadius:t.radius, display:'flex', alignItems:'center', gap:10, cursor:'pointer' }}>
+            <span style={{ fontSize:14 }}>{issue.split(' ')[0]}</span>
+            <span style={{ fontSize:d.fs(13), color:t.text, flex:1, fontFamily:t.font }}>{issue.split(' ').slice(1).join(' ')}</span>
+            <span style={{ fontSize:13, color:t.subtextLight }}>›</span>
+          </Card>
+        ))}
+      </div>
+      <div style={{ position:'absolute', bottom:56, left:0, right:0, padding:'8px 16px', background:t.bg, borderTop:`2px solid ${t.border}`, display:'flex', gap:8, transition:'background 0.3s' }}>
+        <div style={{ flex:1, height:36, background:t.surface, border:`2px solid ${t.border}`, borderRadius:999, padding:'0 12px', display:'flex', alignItems:'center' }}>
+          <span style={{ fontSize:12, color:t.subtextLight, fontFamily:t.font }}>Describe your plant's problem…</span>
+        </div>
+        <div style={{ width:36, height:36, background:t.accent, borderRadius:18, display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, color:t.accentText, cursor:'pointer' }} onClick={() => go('identify')}>📷</div>
+      </div>
+      <BottomNav active={3} go={go} />
+    </div>
+  );
+};
+
+/* ══════════════════════════════════
+   LIGHT METER
+══════════════════════════════════ */
+const LUX_LEVELS = [
+  { max:50,   label:'Dark',           sub:'Very little light', pct:5,  color:'#6a7a6a', suitable:'Cast iron plant, ZZ Plant' },
+  { max:200,  label:'Low Light',      sub:'Shade tolerant',    pct:22, color:'#5a8a5a', suitable:'Pothos, Snake Plant, Peace Lily' },
+  { max:1000, label:'Indirect Light', sub:'Bright room',       pct:45, color:'#4a9a4a', suitable:'Monstera, Fiddle Leaf, Philodendron' },
+  { max:5000, label:'Part Sun',       sub:'A few hours sun',   pct:68, color:'#7ab83a', suitable:'Herbs, succulents, flowering plants' },
+  { max:20000,label:'Bright Sun',     sub:'Direct outdoor',    pct:88, color:'#c8b840', suitable:'Tomatoes, Basil, full sun vegetables' },
+  { max:Infinity, label:'Full Sun',   sub:'Intense direct',    pct:100,color:'#e8a020', suitable:'Cacti, lavender, drought-tolerant' },
+];
+function luminanceToLux(avg) { return Math.round(Math.pow(avg/255, 2.2) * 65000); }
+function getLuxLevel(lux) { return LUX_LEVELS.find(l => lux <= l.max) || LUX_LEVELS[LUX_LEVELS.length-1]; }
+
+const LightMeterScreen = ({ go }) => {
+  const { t } = useT();
+  const videoRef = useRef(); const canvasRef = useRef();
+  const [lux, setLux] = useState(null); const [err, setErr] = useState(null);
+  const [stream, setStream] = useState(null); const [animPct, setAnimPct] = useState(0);
+  useEffect(() => {
+    let active = true;
+    navigator.mediaDevices?.getUserMedia({ video:{ facingMode:{ ideal:'environment' } } })
+      .then(s => { if(!active){s.getTracks().forEach(t=>t.stop());return;} setStream(s); if(videoRef.current){videoRef.current.srcObject=s;videoRef.current.play().catch(()=>{});} })
+      .catch(e => { if(active) setErr(e.name==='NotAllowedError'?'Camera permission denied':'Camera unavailable — showing simulated reading'); });
+    return () => { active=false; };
+  }, []);
+  useEffect(() => {
+    if (!stream) return;
+    const id = setInterval(() => {
+      const v=videoRef.current, c=canvasRef.current; if(!v||!c||v.readyState<2) return;
+      const ctx=c.getContext('2d'); c.width=64; c.height=48; ctx.drawImage(v,0,0,64,48);
+      const data=ctx.getImageData(0,0,64,48).data; let total=0;
+      for(let i=0;i<data.length;i+=4) total+=0.299*data[i]+0.587*data[i+1]+0.114*data[i+2];
+      setLux(luminanceToLux(total/(data.length/4)));
+    }, 600);
+    return () => clearInterval(id);
+  }, [stream]);
+  useEffect(() => { if(lux!==null){const l=getLuxLevel(lux);const id=setTimeout(()=>setAnimPct(l.pct),80);return()=>clearTimeout(id);} }, [lux]);
+  useEffect(() => () => stream?.getTracks().forEach(tr=>tr.stop()), [stream]);
+  const displayLux = lux ?? 2400;
+  const level = getLuxLevel(displayLux);
+  return (
+    <div className="screen" style={{ background:t.camBg, position:'relative', overflow:'hidden' }}>
+      {!err && <video ref={videoRef} className="camera-video" autoPlay playsInline muted style={{ opacity:0.85 }} />}
+      {err && <div style={{ position:'absolute', inset:0, background:t.camBg, display:'flex', alignItems:'center', justifyContent:'center' }}><span style={{ color:'rgba(255,255,255,0.3)', fontSize:12, textAlign:'center', padding:'0 30px' }}>{err}</span></div>}
+      <canvas ref={canvasRef} className="camera-canvas" />
+      <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', justifyContent:'space-between', padding:'12px' }}>
+        <div style={{ display:'flex', justifyContent:'space-between' }}>
+          <div onClick={() => { stream?.getTracks().forEach(tr=>tr.stop()); go('plants'); }} style={{ width:28, height:28, borderRadius:14, background:'rgba(0,0,0,0.5)', border:'2px solid rgba(255,255,255,0.4)', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:13, cursor:'pointer' }}>✕</div>
+          <div style={{ width:28 }}></div>
+        </div>
+        <div style={{ background:'rgba(0,0,0,0.68)', borderRadius:20, padding:'16px 18px' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginBottom:4 }}>
+            <div style={{ fontSize:26, fontWeight:700, color:'#f5f2ee', fontFamily:t.font }}>{level.label}</div>
+            <div style={{ fontSize:13, color:'rgba(255,255,255,0.6)', fontFamily:t.font }}>{displayLux.toLocaleString()} lux</div>
+          </div>
+          <div style={{ fontSize:11, color:'rgba(255,255,255,0.5)', marginBottom:12, fontFamily:t.font }}>{level.sub}</div>
+          <div style={{ height:10, background:'rgba(255,255,255,0.12)', borderRadius:5, overflow:'hidden', marginBottom:6 }}>
+            <div style={{ height:'100%', borderRadius:5, width:`${err?45:animPct}%`, background:`linear-gradient(90deg,#3a6a3a,${level.color})`, transition:'width 0.8s cubic-bezier(0.4,0,0.2,1)' }}></div>
+          </div>
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:8, color:'rgba(255,255,255,0.3)', marginBottom:12 }}>
+            {LUX_LEVELS.slice(0,-1).map(l => <span key={l.label}>{l.label}</span>)}
+          </div>
+          <div style={{ background:'rgba(255,255,255,0.1)', borderRadius:10, padding:'8px 10px' }}>
+            <div style={{ fontSize:10, color:'rgba(255,255,255,0.5)', marginBottom:3, fontFamily:t.font }}>✅ Suitable for</div>
+            <div style={{ fontSize:12, color:'#c8d9c0', fontFamily:t.font }}>{level.suitable}</div>
+          </div>
+        </div>
+        <div style={{ display:'flex', justifyContent:'center' }}>
+          <div onClick={() => { stream?.getTracks().forEach(tr=>tr.stop()); go('plants'); }} style={{ background:t.accent, borderRadius:999, padding:'10px 32px', border:`2px solid ${t.borderAccent}`, cursor:'pointer' }}>
+            <span style={{ color:t.accentText, fontSize:15, fontWeight:700, fontFamily:t.font }}>Done</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ══════════════════════════════════
+   SETTINGS
+══════════════════════════════════ */
+const SettingsScreen = ({ go }) => {
+  const { t, d } = useT();
+  return (
+    <div className="screen" style={{ background:t.bg, fontFamily:t.font }}>
+      <StatusBar />
+      <div style={{ padding:`4px 16px 8px`, display:'flex', alignItems:'center', gap:8 }}>
+        <div onClick={() => go('plants')} style={{ width:28, height:28, borderRadius:14, background:t.surface, border:`1.5px solid ${t.border}`, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', fontSize:13, color:t.subtext }}>←</div>
+        <span style={{ fontSize:d.fs(22), fontWeight:700, color:t.text }}>Settings</span>
+      </div>
+      <div className="scroll-area" style={{ padding:`0 16px`, paddingBottom:20, display:'flex', flexDirection:'column', gap:12 }}>
+        <Card green style={{ padding:'12px 14px' }}>
+          <div style={{ fontSize:13, fontWeight:700, color:t.accent, marginBottom:8 }}>📍 Location &amp; Weather</div>
+          <div style={{ background:t.bg, border:`2px solid ${t.border}`, borderRadius:t.radius, padding:'8px 12px', marginBottom:8, display:'flex', justifyContent:'space-between', alignItems:'center', cursor:'pointer' }}>
+            <span style={{ fontSize:14, color:t.text }}>Austin, TX</span><span style={{ fontSize:12, color:t.accent }}>Edit ›</span>
+          </div>
+          <div style={{ background:t.accent, borderRadius:8, padding:'6px 10px', fontSize:12, color:t.accentText, textAlign:'center', marginBottom:8 }}>🌤 72°F · Partly Cloudy · Good watering day</div>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <span style={{ fontSize:12, color:t.accent }}>Smart watering based on weather</span>
+            <div style={{ width:32, height:18, background:t.accent, borderRadius:9, border:`2px solid ${t.accent}` }}></div>
+          </div>
+        </Card>
+        <Card style={{ padding:'12px 14px' }}>
+          <div style={{ fontSize:13, fontWeight:700, color:t.text, marginBottom:8 }}>☁️ Google Drive Backup</div>
+          <div style={{ background:t.dangerLight, border:`2px solid ${t.dangerBorder}`, borderRadius:10, padding:'8px 12px', marginBottom:10, fontSize:12, color:t.warn }}>⚠️ Not connected — your data isn't backed up</div>
+          <Btn style={{ height:40 }}>Connect Google Drive</Btn>
+        </Card>
+        <Card style={{ padding:'12px 14px' }}>
+          <div style={{ fontSize:13, fontWeight:700, color:t.text, marginBottom:8 }}>🔔 Notifications</div>
+          {[{ label:'Care reminders', on:true }, { label:'Weather alerts', on:false }, { label:'Journal prompts', on:true }].map(n => (
+            <div key={n.label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 0', borderBottom:`1px solid ${t.border}` }}>
+              <span style={{ fontSize:13, color:t.text }}>{n.label}</span>
+              <div style={{ width:32, height:18, background:n.on?t.accent:t.border, borderRadius:9, border:`2px solid ${n.on?t.accent:t.border}`, transition:'all 0.2s' }}></div>
+            </div>
+          ))}
+        </Card>
+        <Card style={{ padding:'12px 14px' }}>
+          <div style={{ fontSize:13, fontWeight:700, color:t.text, marginBottom:8 }}>🌿 Preferences</div>
+          {['Units: Imperial','Dark mode: Auto','Language: English'].map(item => (
+            <div key={item} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:`1px solid ${t.border}`, fontSize:13, color:t.subtext, cursor:'pointer' }}>
+              <span>{item}</span><span style={{ color:t.subtextLight }}>›</span>
+            </div>
+          ))}
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+/* ══════════════════════════════════
+   ROOT + TWEAKS
+══════════════════════════════════ */
+const SCREEN_LABELS = {
+  onboarding:'Onboarding', 'onboarding-wizard':'Onboarding Wizard',
+  plants:'My Plants', schedule:'Schedule', detail:'Plant Detail',
+  identify:'Identify', 'new-plant-setup':'New Plant Setup',
+  dr:'Dr. Plant', light:'Light Meter', settings:'Settings',
+};
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "Earthy Sketch",
+  "density": 0,
+  "voice": "Casual"
+}/*EDITMODE-END*/;
+
+const App = () => {
+  const [screen, setScreen] = useState('plants');
+  const go = (s) => setScreen(s);
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+  const theme = THEMES[tweaks.theme] || THEMES['Earthy Sketch'];
+  const voice = VOICE[tweaks.voice] || VOICE.Casual;
+  const d = useDensity(tweaks.density);
+  const ctx = { t: theme, voice, d };
+
+  const renderScreen = () => {
+    switch(screen) {
+      case 'onboarding':        return <OnboardingScreen go={go} />;
+      case 'onboarding-wizard': return <OnboardingWizard go={go} />;
+      case 'plants':            return <MyPlantsScreen go={go} />;
+      case 'schedule':          return <ScheduleScreen go={go} />;
+      case 'detail':            return <PlantDetailScreen go={go} />;
+      case 'identify':          return <IdentifyScreen go={go} />;
+      case 'new-plant-setup':   return <NewPlantSetupScreen go={go} />;
+      case 'dr':                return <DrScreen go={go} />;
+      case 'light':             return <LightMeterScreen go={go} />;
+      case 'settings':          return <SettingsScreen go={go} />;
+      default:                  return <MyPlantsScreen go={go} />;
+    }
+  };
+
+  return (
+    <ThemeCtx.Provider value={ctx}>
+      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:16, padding:'32px 16px', fontFamily: theme.font }}>
+        <div style={{ color:'#666', fontSize:13, fontFamily:'Caveat,cursive' }}>{SCREEN_LABELS[screen]||screen}</div>
+        <div className="phone" style={{ background: theme.bg }}>
+          <div className="phone-notch"></div>
+          {renderScreen()}
+        </div>
+        <div style={{ display:'flex', gap:6, flexWrap:'wrap', justifyContent:'center', maxWidth:400 }}>
+          {Object.entries(SCREEN_LABELS).map(([k,v]) => (
+            <div key={k} onClick={() => go(k)}
+              style={{ padding:'4px 10px', borderRadius:999, cursor:'pointer',
+                background: screen===k?'#3d5a3e':'#2e2e2e',
+                color: screen===k?'#f5f2ee':'#888',
+                border:`1.5px solid ${screen===k?'#5a7a5b':'#444'}`,
+                fontSize:12, fontFamily:'Caveat,cursive' }}>{v}</div>
+          ))}
+        </div>
+      </div>
+
+      <TweaksPanel>
+        <TweakSection title="Visual Theme">
+          <TweakRadio id="theme" label="Theme" options={['Earthy Sketch','Clean Minimal','Dark Botanical']}
+            value={tweaks.theme} onChange={v => setTweak('theme', v)} />
+        </TweakSection>
+        <TweakSection title="Density">
+          <TweakSlider id="density" label="Density" min={0} max={2} step={1}
+            value={tweaks.density} onChange={v => setTweak('density', v)}
+            formatValue={v => ['Airy','Normal','Compact'][v]} />
+        </TweakSection>
+        <TweakSection title="Tone of Voice">
+          <TweakRadio id="voice" label="Copy style" options={['Casual','Scientific']}
+            value={tweaks.voice} onChange={v => setTweak('voice', v)} />
+        </TweakSection>
+      </TweaksPanel>
+    </ThemeCtx.Provider>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
