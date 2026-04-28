@@ -1,0 +1,9 @@
+{
+  "name": "Garden Tracker",
+  "short_name": "GardenTracker",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f3f3f0",
+  "theme_color": "#2f855a",
+  "icons": []
+}

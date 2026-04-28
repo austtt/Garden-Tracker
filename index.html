@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Garden Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- PWA manifest -->
+  <link rel="manifest" href="manifest.json" />
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- React + ReactDOM + Babel -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- MediaPipe Tasks (Image, Segmentation) -->
+  <script type="module">
+    import {
+      ImageClassifier,
+      ImageSegmenter,
+      FilesetResolver
+    } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
+
+    window.MPTasks = { ImageClassifier, ImageSegmenter, FilesetResolver };
+  </script>
+
+  <!-- Components -->
+  <script type="text/babel" src="components/App.jsx"></script>
+  <script type="text/babel" src="components/OnboardingScreen.jsx"></script>
+  <script type="text/babel" src="components/MyPlantsScreen.jsx"></script>
+  <script type="text/babel" src="components/IdentifyScreen.jsx"></script>
+  <script type="text/babel" src="components/DrScreen.jsx"></script>
+  <script type="text/babel" src="components/SettingsScreen.jsx"></script>
+  <script type="text/babel" src="components/PlantCard.jsx"></script>
+
+  <!-- Utils -->
+  <script type="text/babel" src="utils/ml.js"></script>
+  <script type="text/babel" src="utils/weather.js"></script>
+
+  <!-- Main entry -->
+  <script type="text/babel">
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+
+  <!-- Service worker registration -->
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("service-worker.js");
+      });
+    }
+  </script>
+</body>
+</html>
